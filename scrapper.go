@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -32,6 +33,25 @@ func startScraping(db *database.Queries, concurrency int, timeBetweenRequest tim
 	}
 }
 
+func parseFeedDate(value string) (time.Time, error) {
+	layouts := []string{
+		time.RFC1123Z,
+		time.RFC1123,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02 15:04:05 -0700",
+		"2006-01-02 15:04:05",
+	}
+
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unsupported date format: %s", value)
+}
+
 func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 	defer wg.Done()
 	_, err := db.MarkFeedAsFetched(context.Background(), feed.ID)
@@ -53,7 +73,7 @@ func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 			description.Valid = true
 		}
 
-		pubAt, err := time.Parse(time.RFC1123Z, item.PubDate)
+		pubAt, err := parseFeedDate(item.PubDate)
 		if err != nil {
 			log.Printf("couldn't parse date %v with err %v", item.PubDate, err)
 			continue
